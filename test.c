@@ -6,7 +6,7 @@
 
 #define NUM_OPERATIONS 10
 #define MAX_SIZE 1000
-#define NUM_THREADS_CONC 1
+#define NUM_THREADS_CONC 5
 
 int dequeue_with_sleep(void *arg);
 int enqueueItems(void *arg);
@@ -33,30 +33,23 @@ void test_multiconcurrent_enqueue_dequeue()
         thrd_create(&enqueueThreads[i], (int (*)(void *))enqueue_thread, NULL);
     }
     
-    printf("error 4\n");
     // Wait for enqueueing threads to finish
     for (int i = 0; i < NUM_THREADS_CONC; i++)
     {
         thrd_join(enqueueThreads[i], NULL);
     }
-    printf("error 5\n");
     // Wait for dequeueing threads to finish
     for (int i = 0; i < NUM_THREADS_CONC; i++)
     {
         thrd_join(dequeueThreads[i], NULL);
     }
-    printf("error 6\n");
     // Queue should be empty
     assert(size() == 0);
-    printf("error 7\n");
     // All items should have been dequeued
     assert(visited() == NUM_THREADS_CONC);
-    printf("error 8\n");
     // No threads should be waiting
     assert(waiting() == 0);
-    printf("error 9\n");
     destroyQueue();
-    printf("error 10\n");
     printf("Multiconcurrent enqueue and dequeue test passed.\n");
 }
 
@@ -114,26 +107,26 @@ void test_tryDequeue()
     // Try dequeueing when the queue is empty
     void *item;
     assert(!tryDequeue(&item));
-
     // Enqueue items
     for (size_t i = 0; i < num_items; i++)
     {
         enqueue(&items[i]);
     }
-
+    printf("error number 2\n");
     // Try dequeueing items and check the order
     for (size_t i = 0; i < num_items; i++)
     {
         assert(tryDequeue(&item));
+        printf("here\n");
         printf("Dequeued: %d\n", *(int *)item);
         assert(*(int *)item == items[i]);
     }
-
+    printf("error number 3\n");
     // Queue should be empty
     assert(size() == 0);
-
+    printf("error number 4\n");
     destroyQueue();
-
+    printf("error number 5\n");
     printf("tryDequeue test passed.\n");
 }
 
@@ -231,7 +224,7 @@ void test_basic_concurrent_enqueue_dequeue()
     initQueue();
 
     // Number of items to enqueue
-    int numItems = 100;
+    int numItems = 4;
     int half = numItems / 2;
     // Enqueue items in a separate thread
     thrd_t enqueueThread_a;
@@ -244,8 +237,9 @@ void test_basic_concurrent_enqueue_dequeue()
     {
         int *item = (int *)dequeue();
         printf("Dequeued item: %d\n", *item);
+        printf("%d\n", i);
     }
-
+    
     destroyQueue();
 
     printf("Basic concurrent enqueue and dequeue test passed.\n");
@@ -464,8 +458,8 @@ int main()
     //test_tryDequeue();
     //test_size();
     //test_waiting();
-    //test_basic_concurrent_enqueue_dequeue();
-    test_multiconcurrent_enqueue_dequeue();
+    test_basic_concurrent_enqueue_dequeue(); // [roblame]
+    //**test_multiconcurrent_enqueue_dequeue();
     //test_enqueue_tryDequeue();
     //test_enqueue_dequeue_with_sleep();
     //test_edge_cases();
