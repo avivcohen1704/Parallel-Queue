@@ -5,28 +5,27 @@
 void lock_acquire(void);
 void lock_release(void);
 
-// TODO to implement channels for each item and for each item and for each thread
-typedef struct thread_node{
-    cnd_t cv;
+typedef struct thread_node{ // struct to represent a thread
+    cnd_t cv;   
     int channel;
     struct thread_node* next;
 } thread_node;
 
-typedef struct thread_LL{
+typedef struct thread_LL{ // struct to represent a linked list of threads
     thread_node* first;
     thread_node* last;
     _Atomic size_t waiting;
     int max_channel;
 } thread_LL;
 
-typedef struct item_node{
+typedef struct item_node{ // struct to represent an item
     void* item;
     struct item_node* next;
     int channel;
 
 } item_node;
 
-typedef struct item_LL{
+typedef struct item_LL{ // struct to represent a linked list of items
     item_node* first;
     item_node* last;
     int max_channel;
@@ -41,18 +40,15 @@ item_LL* item_Q;
 mtx_t lock;
 thread_LL* thread_Q;
 
-// initialize the queue
+// initialize both of the queues
 void initQueue(void){
-    printf("Qs initialization starting\n");
     if(init == 0){
-        printf("The queue has already been initialized\n");
         return;
     }
 
     item_Q = (item_LL*) malloc(sizeof(item_LL));
     int rc = mtx_init(&lock, mtx_plain);
     if(rc != thrd_success){
-        printf("Failed to initialize the queue lock\n");
         return;
     }
     item_Q->first = NULL;
@@ -68,25 +64,22 @@ void initQueue(void){
     thread_Q->max_channel = 0;
 
     init = 0;
-    printf("Qs initialization finished\n");
 }
 
-// destroy the queue
+// destroy bot of the queues
 void destroyQueue(void) {
-    printf("Qs destroyment starting\n");
     lock_acquire();
     if(init == 1){
-        printf("The queue has not been initialized\n");
         lock_release();
         return;
     }
 
     if(waiting() > 0) { 
-        printf("There are waiting threads!\n");
     }
 
     item_node* temp1 = item_Q->first;
     while(temp1 != NULL){
+
         item_node* next1 = temp1->next;
         free(temp1);
         temp1 = next1;
@@ -103,18 +96,16 @@ void destroyQueue(void) {
     init = 1;
     mtx_destroy(&lock);
     
-    printf("Qs destroyed\n");
     return;    
 }
 
 // add an item to the queue
 void enqueue(void* item) {
     lock_acquire();
-    printf("Enqueueing an item\n");
     item_node* new_node = malloc(sizeof(item_node));
     new_node->item = item;
     new_node->next = NULL;
-    new_node->channel = item_Q->max_channel;
+    new_node->channel = item_Q->max_channel; // for each item sets a diff channel number that will match the right thread channel number
     item_Q->max_channel++;
     
 
@@ -127,21 +118,28 @@ void enqueue(void* item) {
         item_Q->last = new_node;
     }
     
-    item_Q->size++;
+    
     if(waiting() <= size()){ // if there is no waiting thread, return
-        printf("finished enqueueing item\n");
+        item_Q->size++;
         lock_release();
         return;
     }
-    else{
-
+    else{ // else, wake up the first waiting thread
+        item_Q->size++;
         cnd_signal(&(thread_Q->first->cv));
-        
+
+        thread_node* tmp2 = thread_Q->first;  // delete the thread node that was waked up, so if another enqueue will be called, it will not wake up the same thread
+        if (thread_Q->first->next == NULL) {
+            thread_Q->last = NULL;
+            thread_Q->first = NULL;
+        }
+        else{
+            thread_Q->first = thread_Q->first->next;
+        }
+        free(tmp2);
+
         lock_release();
     }
-    
-
-    printf("finished enqueueing item\n");
 
     return;
 
@@ -150,9 +148,8 @@ void enqueue(void* item) {
 // remove an item from the queue
 void* dequeue(void){
     lock_acquire();
-    printf("trying to dequeue an item\n");
-    if(size() > waiting()){
-        printf("error 1 ===========");
+
+    if(size() > waiting()){ // if there is more items than waiting threads, remove the first item
         int channel = thread_Q->max_channel;
         thread_Q->max_channel ++;
         item_node* temp = item_Q->first;
@@ -162,7 +159,7 @@ void* dequeue(void){
         }
         else{
             item_node* temp2 = temp->next;
-            while(temp2->channel != channel){
+            while(temp2->channel != channel){ // search for the right item
                 temp = temp->next;
                 temp2 = temp->next;
             }
@@ -185,12 +182,10 @@ void* dequeue(void){
         item_Q->visited++;
 
         lock_release();
-        printf("finished dequeueing\n");
         return item;
     }
-    else{
-        printf("error 2 ===========");
-        thread_node* node = (thread_node*) malloc(sizeof(thread_node));
+    else{ // there is no items in the Q, so wait for an item to be added
+        thread_node* node = (thread_node*) malloc(sizeof(thread_node)); 
         cnd_init(&(node->cv));
         node->next = NULL;
         node->channel = thread_Q->max_channel ;
@@ -199,7 +194,7 @@ void* dequeue(void){
             thread_Q->last = node;
             thread_Q->first = node;
         }
-        else{ // if there is no items 
+        else{ // if there is no threads
             thread_Q->last->next = node;
             thread_Q->last = node;            
         }
@@ -214,10 +209,11 @@ void* dequeue(void){
         cnd_destroy(&(node->cv));
 
         
-        void* res = item_Q->first->item;
+        void* res = item_Q->first->item; // removes the item from the Q
         item_node* tmp1 = item_Q->first;
         if(item_Q->first->next == NULL){
             item_Q->last = NULL;
+            item_Q->first = NULL;
         }
         else{
             item_Q->first = item_Q->first->next;    
@@ -225,18 +221,11 @@ void* dequeue(void){
         free(tmp1);
 
 
-        thread_node* tmp2 = thread_Q->first;
-        if(thread_Q->first == NULL){
-            thread_Q->last = NULL;
-        }
-        else{
-            thread_Q->first = thread_Q->first->next;
-        }
-        free(tmp2);
+
 
         thread_Q->waiting--;
         item_Q->visited++;
-        
+        item_Q->size--;
         lock_release();
         
         return res;
@@ -246,11 +235,9 @@ void* dequeue(void){
 
 // try to remove an item from the queue
 bool tryDequeue(void** arg){ 
-    printf("trying to dequeue\n");
     lock_acquire();
-    if( size() <= waiting()){ // add size > waiting (to asure that tryqueue will be unavailable)
+    if( size() <= waiting()) { // this if checks that there is no way for a tryDequeue to succeed, both
         lock_release();
-        printf("TRYdequeue not aviable\n");
         return false;
     }
     int channel = thread_Q->max_channel;
@@ -289,7 +276,6 @@ bool tryDequeue(void** arg){
     item_Q->visited++;
 
     lock_release();
-    printf("finished dequeue succ\n");
     return true;
 }
 
@@ -307,4 +293,3 @@ void lock_acquire(void){while(mtx_lock(&lock) < 0){}}
 
 // release the lock
 void lock_release(void){mtx_unlock(&lock);}
-
